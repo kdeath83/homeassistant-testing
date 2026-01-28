@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import timedelta
 from typing import Any
 
 import voluptuous as vol
@@ -17,6 +18,7 @@ from homeassistant.const import CONF_NAME, CONF_REGION
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.selector import (
     BooleanSelector,
+    DurationSelector,
     SelectSelector,
     SelectSelectorConfig,
     SelectSelectorMode,
@@ -35,6 +37,7 @@ from .const import (
     CONF_INCL_FILTER,
     CONF_ORIGIN,
     CONF_REALTIME,
+    CONF_TIME_DELTA,
     CONF_UNITS,
     CONF_VEHICLE_TYPE,
     DEFAULT_FILTER,
@@ -82,6 +85,7 @@ OPTIONS_SCHEMA = vol.Schema(
         vol.Optional(CONF_AVOID_TOLL_ROADS): BooleanSelector(),
         vol.Optional(CONF_AVOID_SUBSCRIPTION_ROADS): BooleanSelector(),
         vol.Optional(CONF_AVOID_FERRIES): BooleanSelector(),
+        vol.Optional(CONF_TIME_DELTA): DurationSelector(),
     }
 )
 
@@ -102,7 +106,9 @@ CONFIG_SCHEMA = vol.Schema(
 )
 
 
-def default_options(hass: HomeAssistant) -> dict[str, str | bool | list[str]]:
+def default_options(
+    hass: HomeAssistant,
+) -> dict[str, str | bool | list[str] | int]:
     """Get the default options."""
     defaults = DEFAULT_OPTIONS.copy()
     if hass.config.units is US_CUSTOMARY_SYSTEM:
@@ -120,6 +126,12 @@ class WazeOptionsFlow(OptionsFlow):
                 user_input[CONF_INCL_FILTER] = DEFAULT_FILTER
             if user_input.get(CONF_EXCL_FILTER) is None:
                 user_input[CONF_EXCL_FILTER] = DEFAULT_FILTER
+            if time_delta := user_input.get(CONF_TIME_DELTA):
+                user_input[CONF_TIME_DELTA] = int(
+                    timedelta(**time_delta).total_seconds() / 60
+                )
+            else:
+                user_input[CONF_TIME_DELTA] = 0
             return self.async_create_entry(
                 title="",
                 data=user_input,
@@ -137,6 +149,7 @@ class WazeConfigFlow(ConfigFlow, domain=DOMAIN):
     """Handle a config flow for Waze Travel Time."""
 
     VERSION = 2
+    MINOR_VERSION = 2
 
     @staticmethod
     @callback
