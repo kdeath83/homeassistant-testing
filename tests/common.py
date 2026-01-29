@@ -697,6 +697,7 @@ class RegistryEntryWithDefaults(er.RegistryEntry):
         converter=attr.converters.default_if_none(factory=uuid_util.random_uuid_hex),  # type: ignore[misc]
     )
     has_entity_name: bool = attr.ib(default=False)
+    object_id_base: str | None = attr.ib(default=None)
     options: er.ReadOnlyEntityOptionsType = attr.ib(
         default=None, converter=er._protect_entity_options
     )
@@ -1984,15 +1985,14 @@ def get_quality_scale(integration: str) -> dict[str, QualityScaleStatus]:
 
 def get_schema_suggested_value(schema: vol.Schema, key: str) -> Any | None:
     """Get suggested value for key in voluptuous schema."""
-    for marker in schema.schema:
-        # Handle voluptuous markers (Required, Optional) that have a 'schema' attribute
-        if hasattr(marker, "schema") and marker.schema == key:
+    for schema_key in schema:
+        if schema_key == key:
             if (
-                marker.description is None
-                or "suggested_value" not in marker.description
+                schema_key.description is None
+                or "suggested_value" not in schema_key.description
             ):
                 return None
-            return marker.description["suggested_value"]
+            return schema_key.description["suggested_value"]
     return None
 
 
