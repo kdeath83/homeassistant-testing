@@ -6,7 +6,7 @@ import respx
 
 from homeassistant.components.remote_calendar.const import CONF_CALENDAR_NAME, DOMAIN
 from homeassistant.config_entries import SOURCE_USER
-from homeassistant.const import CONF_PASSWORD, CONF_URL, CONF_USERNAME
+from homeassistant.const import CONF_PASSWORD, CONF_URL, CONF_USERNAME, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 
@@ -35,6 +35,7 @@ async def test_form_import_ics(hass: HomeAssistant, ics_content: str) -> None:
         user_input={
             CONF_CALENDAR_NAME: CALENDAR_NAME,
             CONF_URL: CALENDER_URL,
+            CONF_VERIFY_SSL: True,
         },
     )
     assert result2["type"] is FlowResultType.CREATE_ENTRY
@@ -42,6 +43,7 @@ async def test_form_import_ics(hass: HomeAssistant, ics_content: str) -> None:
     assert result2["data"] == {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: True,
     }
 
 
@@ -64,6 +66,7 @@ async def test_form_import_webcal(hass: HomeAssistant, ics_content: str) -> None
         user_input={
             CONF_CALENDAR_NAME: CALENDAR_NAME,
             CONF_URL: "webcal://some.calendar.com/calendar.ics",
+            CONF_VERIFY_SSL: True,
         },
     )
     assert result2["type"] is FlowResultType.CREATE_ENTRY
@@ -71,6 +74,7 @@ async def test_form_import_webcal(hass: HomeAssistant, ics_content: str) -> None
     assert result2["data"] == {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: True,
     }
 
 
@@ -99,6 +103,7 @@ async def test_form_invalid_url(
     user_input = {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: "invalid-url.com",
+        CONF_VERIFY_SSL: True,
     }
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"], user_input
@@ -125,6 +130,7 @@ async def test_form_invalid_url(
         {
             CONF_CALENDAR_NAME: CALENDAR_NAME,
             CONF_URL: CALENDER_URL,
+            CONF_VERIFY_SSL: True,
         },
     )
     assert result3["type"] is FlowResultType.CREATE_ENTRY
@@ -132,6 +138,7 @@ async def test_form_invalid_url(
     assert result3["data"] == {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: True,
     }
 
 
@@ -166,6 +173,7 @@ async def test_unsupported_inputs(
         {
             CONF_CALENDAR_NAME: CALENDAR_NAME,
             CONF_URL: url,
+            CONF_VERIFY_SSL: True,
         },
     )
 
@@ -194,6 +202,7 @@ async def test_form_http_status_forbidden(
     user_input = {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: True,
     }
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"], user_input
@@ -214,34 +223,74 @@ async def test_form_http_status_forbidden(
         )
     )
     result3 = await hass.config_entries.flow.async_configure(
-        result["flow_id"], user_input
+        result["flow_id"],
+        {
+            CONF_CALENDAR_NAME: CALENDAR_NAME,
+            CONF_URL: CALENDER_URL,
+            CONF_VERIFY_SSL: True,
+        },
     )
     assert result3["type"] is FlowResultType.CREATE_ENTRY
     assert result3["title"] == CALENDAR_NAME
     assert result3["data"] == {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: True,
     }
 
 
 @respx.mock
-async def test_form_http_status_unauthorized_auth_flow(
-    hass: HomeAssistant, ics_content: str
+async def test_form_http_status_unauthorized_no_basic_auth(
+    hass: HomeAssistant,
 ) -> None:
-    """Test 401 Unauthorized triggers auth flow."""
+    """Test 401 Unauthorized without Basic auth support shows error."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
     )
     assert result["type"] is FlowResultType.FORM
+    # Server returns 401 but does NOT support Basic Auth
     respx.get(CALENDER_URL).mock(
         return_value=Response(
             status_code=401,
+            headers={"WWW-Authenticate": "Bearer"},
         )
     )
 
     user_input = {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: True,
+    }
+    result2 = await hass.config_entries.flow.async_configure(
+        result["flow_id"], user_input
+    )
+    # Should show error, not redirect to auth step
+    assert result2["type"] is FlowResultType.FORM
+    assert result2["step_id"] == "user"
+    assert result2["errors"] == {"base": "unauthorized"}
+
+
+@respx.mock
+async def test_form_http_status_unauthorized_auth_flow(
+    hass: HomeAssistant, ics_content: str
+) -> None:
+    """Test 401 Unauthorized with Basic auth support triggers auth flow."""
+    result = await hass.config_entries.flow.async_init(
+        DOMAIN, context={"source": SOURCE_USER}
+    )
+    assert result["type"] is FlowResultType.FORM
+    # Server returns 401 with Basic auth support
+    respx.get(CALENDER_URL).mock(
+        return_value=Response(
+            status_code=401,
+            headers={"WWW-Authenticate": "Basic realm=\"calendar\""},
+        )
+    )
+
+    user_input = {
+        CONF_CALENDAR_NAME: CALENDAR_NAME,
+        CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: True,
     }
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"], user_input
@@ -312,6 +361,7 @@ async def test_form_http_status_unauthorized_auth_flow(
     assert result5["data"] == {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: True,
         CONF_USERNAME: "test_user",
         CONF_PASSWORD: "test_pass",
     }
@@ -329,12 +379,14 @@ async def test_form_auth_http_status_forbidden(
     respx.get(CALENDER_URL).mock(
         return_value=Response(
             status_code=401,
+            headers={"WWW-Authenticate": "Basic"},
         )
     )
 
     user_input = {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: True,
     }
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"], user_input
@@ -389,12 +441,14 @@ async def test_form_auth_connection_errors(
     respx.get(CALENDER_URL).mock(
         return_value=Response(
             status_code=401,
+            headers={"WWW-Authenticate": "Basic"},
         )
     )
 
     user_input = {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: True,
     }
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"], user_input
@@ -433,9 +487,11 @@ async def test_no_valid_calendar(hass: HomeAssistant, ics_content: str) -> None:
     user_input = {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: True,
     }
     result2 = await hass.config_entries.flow.async_configure(
-        result["flow_id"], user_input=user_input
+        result["flow_id"],
+        user_input=user_input,
     )
 
     assert result2["type"] is FlowResultType.FORM
@@ -457,6 +513,7 @@ async def test_no_valid_calendar(hass: HomeAssistant, ics_content: str) -> None:
         {
             CONF_CALENDAR_NAME: CALENDAR_NAME,
             CONF_URL: CALENDER_URL,
+            CONF_VERIFY_SSL: False,
         },
     )
     assert result3["type"] is FlowResultType.CREATE_ENTRY
@@ -464,6 +521,7 @@ async def test_no_valid_calendar(hass: HomeAssistant, ics_content: str) -> None:
     assert result3["data"] == {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: CALENDER_URL,
+        CONF_VERIFY_SSL: False,
     }
 
 
@@ -485,6 +543,7 @@ async def test_duplicate_name(
         {
             CONF_CALENDAR_NAME: CALENDAR_NAME,
             CONF_URL: "http://other-calendar.com",
+            CONF_VERIFY_SSL: True,
         },
     )
     await hass.async_block_till_done()
@@ -495,7 +554,7 @@ async def test_duplicate_name(
 
 @respx.mock
 async def test_form_with_api_key_in_url(hass: HomeAssistant, ics_content: str) -> None:
-    """Test calendar URL with API key parameter gets processed correctly."""
+    """Test calendar URL with API key parameter works correctly."""
     api_key_url = f"{CALENDER_URL}?apikey=test_api_key"
     respx.get(api_key_url).mock(
         return_value=Response(
@@ -513,6 +572,7 @@ async def test_form_with_api_key_in_url(hass: HomeAssistant, ics_content: str) -
         {
             CONF_CALENDAR_NAME: CALENDAR_NAME,
             CONF_URL: api_key_url,
+            CONF_VERIFY_SSL: True,
         },
     )
     assert result2["type"] is FlowResultType.CREATE_ENTRY
@@ -520,6 +580,7 @@ async def test_form_with_api_key_in_url(hass: HomeAssistant, ics_content: str) -
     assert result2["data"] == {
         CONF_CALENDAR_NAME: CALENDAR_NAME,
         CONF_URL: api_key_url,
+        CONF_VERIFY_SSL: True,
     }
 
 
@@ -541,6 +602,7 @@ async def test_duplicate_url(
         {
             CONF_CALENDAR_NAME: "new name",
             CONF_URL: CALENDER_URL,
+            CONF_VERIFY_SSL: True,
         },
     )
     await hass.async_block_till_done()
