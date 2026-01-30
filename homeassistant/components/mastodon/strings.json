@@ -111,7 +111,7 @@
         },
         "config_entry_id": {
           "description": "Select the Mastodon instance to use to search.",
-          "name": "Mastdon instance"
+          "name": "Mastodon instance"
         }
       },
       "name": "Account lookup"
