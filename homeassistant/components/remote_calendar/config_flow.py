@@ -4,7 +4,7 @@ from http import HTTPStatus
 import logging
 from typing import Any
 
-from httpx import HTTPError, InvalidURL, TimeoutException
+from httpx import AsyncClient, HTTPError, InvalidURL, Response, TimeoutException
 import voluptuous as vol
 
 from homeassistant.config_entries import ConfigFlow, ConfigFlowResult
@@ -49,6 +49,43 @@ class RemoteCalendarConfigFlow(ConfigFlow, domain=DOMAIN):
         super().__init__()
         self.data: dict[str, Any] = {}
 
+    async def _fetch_calendar(
+        self,
+        client: AsyncClient,
+        url: str,
+        username: str | None = None,
+        password: str | None = None,
+    ) -> tuple[str | None, Response | None]:
+        """Fetch and validate calendar, returning (error_key, response) tuple."""
+        try:
+            res = await get_calendar(client, url, username, password)
+        except TimeoutException as err:
+            _LOGGER.debug("Timeout: %s", str(err) or type(err).__name__)
+            return ("timeout_connect", None)
+        except (HTTPError, InvalidURL) as err:
+            _LOGGER.debug("Error: %s", str(err) or type(err).__name__)
+            return ("cannot_connect", None)
+
+        # Check for auth errors before raise_for_status
+        if res.status_code == HTTPStatus.UNAUTHORIZED:
+            return ("unauthorized", res)
+        if res.status_code == HTTPStatus.FORBIDDEN:
+            return ("forbidden", res)
+
+        # Check for other HTTP errors
+        try:
+            res.raise_for_status()
+        except HTTPError:
+            return ("cannot_connect", res)
+
+        # Validate ICS content
+        try:
+            await parse_calendar(self.hass, res.text)
+        except InvalidIcsException:
+            return ("invalid_ics_file", res)
+
+        return (None, res)
+
     async def async_step_user(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -57,8 +94,10 @@ class RemoteCalendarConfigFlow(ConfigFlow, domain=DOMAIN):
             return self.async_show_form(
                 step_id="user", data_schema=STEP_USER_DATA_SCHEMA
             )
+
         errors: dict = {}
         _LOGGER.debug("User input: %s", user_input)
+
         self._async_abort_entries_match(
             {CONF_CALENDAR_NAME: user_input[CONF_CALENDAR_NAME]}
         )
@@ -67,65 +106,86 @@ class RemoteCalendarConfigFlow(ConfigFlow, domain=DOMAIN):
                 "webcal://", "https://", 1
             )
         self._async_abort_entries_match({CONF_URL: user_input[CONF_URL]})
+
         client = get_async_client(self.hass, verify_ssl=user_input[CONF_VERIFY_SSL])
+
+        # First, check if URL requires authentication
         try:
             res = await get_calendar(client, user_input[CONF_URL])
-
-            if res.status_code == HTTPStatus.UNAUTHORIZED:
-                # Only offer auth step if server supports Basic Auth
-                if _supports_basic_auth(dict(res.headers)):
-                    self.data = user_input
-                    return await self.async_step_auth()
-                # Server doesn't support Basic Auth, show error
-                errors["base"] = "unauthorized"
-                return self.async_show_form(
-                    step_id="user",
-                    data_schema=self.add_suggested_values_to_schema(
-                        STEP_USER_DATA_SCHEMA, user_input
-                    ),
-                    errors=errors,
-                )
-            if res.status_code == HTTPStatus.FORBIDDEN:
-                errors["base"] = "forbidden"
-                return self.async_show_form(
-                    step_id="user",
-                    data_schema=self.add_suggested_values_to_schema(
-                        STEP_USER_DATA_SCHEMA, user_input
-                    ),
-                    errors=errors,
-                )
-            res.raise_for_status()
         except TimeoutException as err:
+            _LOGGER.debug("Timeout: %s", str(err) or type(err).__name__)
             errors["base"] = "timeout_connect"
-            _LOGGER.debug(
-                "A timeout error occurred: %s", str(err) or type(err).__name__
+            return self.async_show_form(
+                step_id="user",
+                data_schema=self.add_suggested_values_to_schema(
+                    STEP_USER_DATA_SCHEMA, user_input
+                ),
+                errors=errors,
             )
         except (HTTPError, InvalidURL) as err:
+            _LOGGER.debug("Error: %s", str(err) or type(err).__name__)
             errors["base"] = "cannot_connect"
-            _LOGGER.debug("An error occurred: %s", str(err) or type(err).__name__)
-        else:
-            try:
-                await parse_calendar(self.hass, res.text)
-            except InvalidIcsException:
-                errors["base"] = "invalid_ics_file"
-            else:
-                return self.async_create_entry(
-                    title=user_input[CONF_CALENDAR_NAME], data=user_input
-                )
+            return self.async_show_form(
+                step_id="user",
+                data_schema=self.add_suggested_values_to_schema(
+                    STEP_USER_DATA_SCHEMA, user_input
+                ),
+                errors=errors,
+            )
 
-        return self.async_show_form(
-            step_id="user",
-            data_schema=self.add_suggested_values_to_schema(
-                STEP_USER_DATA_SCHEMA, user_input
-            ),
-            errors=errors,
+        # Handle authentication required
+        if res.status_code == HTTPStatus.UNAUTHORIZED:
+            if _supports_basic_auth(dict(res.headers)):
+                self.data = user_input
+                return await self.async_step_auth()
+            # Server doesn't support Basic Auth
+            errors["base"] = "unauthorized"
+            return self.async_show_form(
+                step_id="user",
+                data_schema=self.add_suggested_values_to_schema(
+                    STEP_USER_DATA_SCHEMA, user_input
+                ),
+                errors=errors,
+            )
+
+        # Handle forbidden - abort, changing URL won't help
+        if res.status_code == HTTPStatus.FORBIDDEN:
+            return self.async_abort(reason="forbidden")
+
+        # Handle other HTTP errors
+        try:
+            res.raise_for_status()
+        except HTTPError:
+            errors["base"] = "cannot_connect"
+            return self.async_show_form(
+                step_id="user",
+                data_schema=self.add_suggested_values_to_schema(
+                    STEP_USER_DATA_SCHEMA, user_input
+                ),
+                errors=errors,
+            )
+
+        # Validate ICS content
+        try:
+            await parse_calendar(self.hass, res.text)
+        except InvalidIcsException:
+            errors["base"] = "invalid_ics_file"
+            return self.async_show_form(
+                step_id="user",
+                data_schema=self.add_suggested_values_to_schema(
+                    STEP_USER_DATA_SCHEMA, user_input
+                ),
+                errors=errors,
+            )
+
+        return self.async_create_entry(
+            title=user_input[CONF_CALENDAR_NAME], data=user_input
         )
 
     async def async_step_auth(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
         """Handle the authentication step."""
-        errors: dict = {}
         if user_input is None:
             return self.async_show_form(
                 step_id="auth",
@@ -136,62 +196,32 @@ class RemoteCalendarConfigFlow(ConfigFlow, domain=DOMAIN):
             self.hass, verify_ssl=self.data.get(CONF_VERIFY_SSL, True)
         )
 
-        try:
-            res = await get_calendar(
-                client,
-                self.data[CONF_URL],
-                username=user_input[CONF_USERNAME],
-                password=user_input[CONF_PASSWORD],
+        error, _ = await self._fetch_calendar(
+            client,
+            self.data[CONF_URL],
+            username=user_input[CONF_USERNAME],
+            password=user_input[CONF_PASSWORD],
+        )
+
+        if error:
+            # 403 after providing credentials = access denied, abort
+            if error == "forbidden":
+                return self.async_abort(reason="forbidden")
+
+            return self.async_show_form(
+                step_id="auth",
+                data_schema=self.add_suggested_values_to_schema(
+                    STEP_AUTH_DATA_SCHEMA, user_input
+                ),
+                errors={"base": error},
             )
 
-            if res.status_code == HTTPStatus.UNAUTHORIZED:
-                errors["base"] = "unauthorized"
-                return self.async_show_form(
-                    step_id="auth",
-                    data_schema=self.add_suggested_values_to_schema(
-                        STEP_AUTH_DATA_SCHEMA, user_input
-                    ),
-                    errors=errors,
-                )
-            if res.status_code == HTTPStatus.FORBIDDEN:
-                # 403 after auth means access denied, not wrong credentials
-                errors["base"] = "forbidden"
-                return self.async_show_form(
-                    step_id="auth",
-                    data_schema=self.add_suggested_values_to_schema(
-                        STEP_AUTH_DATA_SCHEMA, user_input
-                    ),
-                    errors=errors,
-                )
-            res.raise_for_status()
-        except TimeoutException as err:
-            errors["base"] = "timeout_connect"
-            _LOGGER.debug(
-                "A timeout error occurred: %s", str(err) or type(err).__name__
-            )
-        except (HTTPError, InvalidURL) as err:
-            errors["base"] = "cannot_connect"
-            _LOGGER.debug("An error occurred: %s", str(err) or type(err).__name__)
-        else:
-            try:
-                await parse_calendar(self.hass, res.text)
-            except InvalidIcsException:
-                errors["base"] = "invalid_ics_file"
-            else:
-                # Combine stored data with auth credentials
-                entry_data = {
-                    **self.data,
-                    CONF_USERNAME: user_input[CONF_USERNAME],
-                    CONF_PASSWORD: user_input[CONF_PASSWORD],
-                }
-                return self.async_create_entry(
-                    title=self.data[CONF_CALENDAR_NAME], data=entry_data
-                )
-
-        return self.async_show_form(
-            step_id="auth",
-            data_schema=self.add_suggested_values_to_schema(
-                STEP_AUTH_DATA_SCHEMA, user_input
-            ),
-            errors=errors,
+        # Success - combine stored data with auth credentials
+        entry_data = {
+            **self.data,
+            CONF_USERNAME: user_input[CONF_USERNAME],
+            CONF_PASSWORD: user_input[CONF_PASSWORD],
+        }
+        return self.async_create_entry(
+            title=self.data[CONF_CALENDAR_NAME], data=entry_data
         )

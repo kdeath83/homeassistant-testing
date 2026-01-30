@@ -185,10 +185,8 @@ async def test_unsupported_inputs(
 
 
 @respx.mock
-async def test_form_http_status_forbidden(
-    hass: HomeAssistant, ics_content: str
-) -> None:
-    """Test 403 Forbidden shows error with preserved fields."""
+async def test_form_http_status_forbidden(hass: HomeAssistant) -> None:
+    """Test 403 Forbidden aborts the flow."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
     )
@@ -207,36 +205,9 @@ async def test_form_http_status_forbidden(
     result2 = await hass.config_entries.flow.async_configure(
         result["flow_id"], user_input
     )
-    assert result2["type"] is FlowResultType.FORM
-    assert result2["errors"] == {"base": "forbidden"}
-    # Verify fields are preserved
-    assert (
-        get_schema_suggested_value(result2["data_schema"], CONF_CALENDAR_NAME)
-        == CALENDAR_NAME
-    )
-    assert get_schema_suggested_value(result2["data_schema"], CONF_URL) == CALENDER_URL
-
-    respx.get(CALENDER_URL).mock(
-        return_value=Response(
-            status_code=200,
-            text=ics_content,
-        )
-    )
-    result3 = await hass.config_entries.flow.async_configure(
-        result["flow_id"],
-        {
-            CONF_CALENDAR_NAME: CALENDAR_NAME,
-            CONF_URL: CALENDER_URL,
-            CONF_VERIFY_SSL: True,
-        },
-    )
-    assert result3["type"] is FlowResultType.CREATE_ENTRY
-    assert result3["title"] == CALENDAR_NAME
-    assert result3["data"] == {
-        CONF_CALENDAR_NAME: CALENDAR_NAME,
-        CONF_URL: CALENDER_URL,
-        CONF_VERIFY_SSL: True,
-    }
+    # 403 should abort - changing URL won't help
+    assert result2["type"] is FlowResultType.ABORT
+    assert result2["reason"] == "forbidden"
 
 
 @respx.mock
@@ -283,7 +254,7 @@ async def test_form_http_status_unauthorized_auth_flow(
     respx.get(CALENDER_URL).mock(
         return_value=Response(
             status_code=401,
-            headers={"WWW-Authenticate": "Basic realm=\"calendar\""},
+            headers={"WWW-Authenticate": 'Basic realm="calendar"'},
         )
     )
 
@@ -368,10 +339,8 @@ async def test_form_http_status_unauthorized_auth_flow(
 
 
 @respx.mock
-async def test_form_auth_http_status_forbidden(
-    hass: HomeAssistant, ics_content: str
-) -> None:
-    """Test 403 Forbidden in auth step shows error."""
+async def test_form_auth_http_status_forbidden(hass: HomeAssistant) -> None:
+    """Test 403 Forbidden in auth step aborts the flow."""
     result = await hass.config_entries.flow.async_init(
         DOMAIN, context={"source": SOURCE_USER}
     )
@@ -394,7 +363,7 @@ async def test_form_auth_http_status_forbidden(
     assert result2["type"] is FlowResultType.FORM
     assert result2["step_id"] == "auth"
 
-    # Test auth step with 403 forbidden
+    # Test auth step with 403 forbidden - should abort
     respx.get(CALENDER_URL).mock(
         return_value=Response(
             status_code=403,
@@ -407,16 +376,9 @@ async def test_form_auth_http_status_forbidden(
             CONF_PASSWORD: "test_pass",
         },
     )
-    assert result3["type"] is FlowResultType.FORM
-    assert result3["step_id"] == "auth"
-    assert result3["errors"] == {"base": "forbidden"}
-    # Verify auth fields are preserved
-    assert (
-        get_schema_suggested_value(result3["data_schema"], CONF_USERNAME) == "test_user"
-    )
-    assert (
-        get_schema_suggested_value(result3["data_schema"], CONF_PASSWORD) == "test_pass"
-    )
+    # 403 after auth means access denied - abort, credentials won't help
+    assert result3["type"] is FlowResultType.ABORT
+    assert result3["reason"] == "forbidden"
 
 
 @pytest.mark.parametrize(
