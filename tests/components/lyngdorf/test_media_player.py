@@ -26,7 +26,7 @@ TEST_VIDEO_INPUT = "VID 1"
 TEST_AUDIO_INPUT = "AUD 1"
 
 
-# TODO: Implement options flow and re-enable this test
+# TODO: Implement options flow and re-enable this test  # pylint: disable=fixme
 # async def test_options_zone_flow_validation(
 #     hass: HomeAssistant, init_integration: MockConfigEntry
 # ) -> None:
