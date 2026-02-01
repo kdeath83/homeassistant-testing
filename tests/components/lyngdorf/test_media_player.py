@@ -1,8 +1,22 @@
 """Tests for the Lyngdorf media player platform."""
 
+import logging
 from unittest.mock import MagicMock
 
-from homeassistant.components.media_player import DOMAIN as MEDIA_PLAYER_DOMAIN
+import pytest
+
+from homeassistant.components.lyngdorf.const import DOMAIN
+from homeassistant.components.lyngdorf.media_player import (
+    MP60MainDevice,
+    MP60ZoneBDevice,
+)
+from homeassistant.components.media_player import (
+    DOMAIN as MEDIA_PLAYER_DOMAIN,
+    SERVICE_SELECT_SOUND_MODE,
+    SERVICE_SELECT_SOURCE,
+    MediaPlayerState,
+    MediaType,
+)
 from homeassistant.const import (
     ATTR_ENTITY_ID,
     SERVICE_TURN_OFF,
@@ -14,6 +28,7 @@ from homeassistant.const import (
 )
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers import entity_registry as er
+from homeassistant.helpers.device_registry import DeviceInfo
 
 from tests.common import MockConfigEntry
 
@@ -257,3 +272,155 @@ async def test_zone_b_mute(
     )
 
     assert mock_receiver.zone_b_mute_enabled is True
+
+
+async def test_availability_logging(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_receiver: MagicMock,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test availability logging when device disconnects and reconnects."""
+    main_zone_entity_id = "media_player.mock_lyngdorf_main_zone"
+    zone_b_entity_id = "media_player.mock_lyngdorf_zone_b"
+    assert mock_receiver.register_notification_callback.call_count == 2
+    main_callback = mock_receiver.register_notification_callback.call_args_list[0].args[
+        0
+    ]
+    zone_b_callback = mock_receiver.register_notification_callback.call_args_list[
+        1
+    ].args[0]
+
+    with caplog.at_level(logging.INFO):
+        mock_receiver.connected = False
+        main_callback()
+        zone_b_callback()
+        await hass.async_block_till_done()
+
+    main_state = hass.states.get(main_zone_entity_id)
+    zone_b_state = hass.states.get(zone_b_entity_id)
+    assert main_state is not None
+    assert zone_b_state is not None
+    assert main_state.state == "unavailable"
+    assert zone_b_state.state == "unavailable"
+    assert "Device is unavailable" in caplog.text
+
+    caplog.clear()
+    with caplog.at_level(logging.INFO):
+        mock_receiver.connected = True
+        main_callback()
+        zone_b_callback()
+        await hass.async_block_till_done()
+
+    main_state = hass.states.get(main_zone_entity_id)
+    zone_b_state = hass.states.get(zone_b_entity_id)
+    assert main_state is not None
+    assert zone_b_state is not None
+    assert main_state.state != "unavailable"
+    assert zone_b_state.state != "unavailable"
+    assert "Device is back online" in caplog.text
+
+
+async def test_service_selects(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_receiver: MagicMock,
+) -> None:
+    """Test selecting source and sound mode services."""
+    await hass.services.async_call(
+        MEDIA_PLAYER_DOMAIN,
+        SERVICE_SELECT_SOURCE,
+        {
+            ATTR_ENTITY_ID: "media_player.mock_lyngdorf_main_zone",
+            "source": "HDMI",
+        },
+        blocking=True,
+    )
+    assert mock_receiver.source == "HDMI"
+
+    await hass.services.async_call(
+        MEDIA_PLAYER_DOMAIN,
+        SERVICE_SELECT_SOUND_MODE,
+        {
+            ATTR_ENTITY_ID: "media_player.mock_lyngdorf_main_zone",
+            "sound_mode": "Movie",
+        },
+        blocking=True,
+    )
+    assert mock_receiver.sound_mode == "Movie"
+
+
+def test_entity_properties_and_attributes(mock_receiver: MagicMock) -> None:
+    """Test entity properties and attributes without hass."""
+    config_entry = MockConfigEntry(
+        domain=DOMAIN,
+        unique_id="MP-60:127.0.0.1",
+        data={"host": "127.0.0.1", "model": "MP-60"},
+    )
+    device_info = DeviceInfo(identifiers={(DOMAIN, "device")})
+
+    mock_receiver.power_on = True
+    mock_receiver.audio_information = "Stereo"
+    mock_receiver.video_information = "No video"
+    mock_receiver.streaming_source = "AirPlay"
+    mock_receiver.audio_input = "optical"
+    mock_receiver.video_input = "hdmi"
+    mock_receiver.room_perfect_position = "focus"
+    mock_receiver.available_room_perfect_positions = ["focus", "global"]
+    mock_receiver.volume = None
+    mock_receiver.available_sources = ["HDMI"]
+    mock_receiver.available_sound_modes = ["Movie"]
+    mock_receiver.source = "HDMI"
+    mock_receiver.sound_mode = "Movie"
+
+    main = MP60MainDevice(mock_receiver, config_entry, device_info)
+    assert main.state is MediaPlayerState.PLAYING
+    assert main.media_title == "audio: Stereo "
+    assert main.media_content_type is MediaType.VIDEO
+    assert main.source_list == ["HDMI"]
+    assert main.sound_mode_list == ["Movie"]
+    assert main.is_volume_muted is mock_receiver.mute_enabled
+    assert main.volume_level is None
+    attributes = main.extra_state_attributes
+    assert attributes["streaming_source"] == "AirPlay"
+    assert attributes["audio_input"] == "optical"
+    assert attributes["video_input"] == "hdmi"
+    assert attributes["room_perfect_position"] == "focus"
+    assert attributes["room_perfect_position_list"] == ["focus", "global"]
+
+    mock_receiver.video_information = "Video"
+    assert main.media_title == "audio: Stereo video: Video"
+    assert main.media_content_type is MediaType.VIDEO
+
+    main.select_room_perfect_position("global")
+    assert mock_receiver.room_perfect_position == "global"
+
+    mock_receiver.zone_b_power_on = True
+    mock_receiver.zone_b_audio_input = "aux"
+    mock_receiver.zone_b_streaming_source = "DLNA"
+    mock_receiver.zone_b_volume = "invalid"
+    zone_b = MP60ZoneBDevice(mock_receiver, config_entry, device_info)
+    assert zone_b.state is MediaPlayerState.ON
+    assert zone_b.volume_level is None
+    zone_b_attrs = zone_b.extra_state_attributes
+    assert zone_b_attrs["audio_input"] == "aux"
+    assert zone_b_attrs["streaming_source"] == "DLNA"
+
+
+async def test_volume_clamps(
+    hass: HomeAssistant,
+    init_integration: MockConfigEntry,
+    mock_receiver: MagicMock,
+) -> None:
+    """Test volume level clamps at max."""
+    await hass.services.async_call(
+        MEDIA_PLAYER_DOMAIN,
+        SERVICE_VOLUME_SET,
+        {
+            ATTR_ENTITY_ID: "media_player.mock_lyngdorf_main_zone",
+            "volume_level": 1.0,
+        },
+        blocking=True,
+    )
+
+    assert mock_receiver.volume == 18.0

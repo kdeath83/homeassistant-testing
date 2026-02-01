@@ -58,6 +58,7 @@ def mock_receiver() -> Generator[MagicMock]:
         receiver.name = "Mock Lyngdorf"
         receiver.register_notification_callback = MagicMock()
         receiver.un_register_notification_callback = MagicMock()
+        receiver.connected = True
 
         # Main zone properties
         receiver.power_on = False
