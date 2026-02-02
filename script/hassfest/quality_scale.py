@@ -945,7 +945,6 @@ INTEGRATIONS_WITHOUT_QUALITY_SCALE_FILE = [
     "telegram",
     "tellduslive",
     "tellstick",
-    "telnet",
     "temper",
     "template",
     "tesla_fleet",
