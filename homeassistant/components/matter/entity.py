@@ -155,7 +155,7 @@ class MatterEntity(Entity):
 
         found_labels: list[str] = [
             lbl.value
-            for label in labeling_list or []
+            for label in labeling_list or ["label"]
             for lbl in (*user_label_list, *fixed_label_list)
             if lbl.label.lower() == label
         ]
