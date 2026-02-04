@@ -2,13 +2,11 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 from typing import Any
 
 from pyvizio import VizioAsync
 
 from homeassistant.components.media_player import MediaPlayerDeviceClass
-from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     CONF_ACCESS_TOKEN,
     CONF_DEVICE_CLASS,
@@ -22,23 +20,16 @@ from homeassistant.helpers.storage import Store
 from homeassistant.helpers.typing import ConfigType
 
 from .const import CONF_APPS, DEFAULT_TIMEOUT, DEVICE_ID, DOMAIN, VIZIO_DEVICE_CLASSES
-from .coordinator import VizioAppsDataUpdateCoordinator, VizioDeviceCoordinator
+from .coordinator import (
+    VizioAppsDataUpdateCoordinator,
+    VizioConfigEntry,
+    VizioDeviceCoordinator,
+    VizioRuntimeData,
+)
 from .services import async_setup_services
 
 CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
 PLATFORMS = [Platform.MEDIA_PLAYER]
-
-
-@dataclass
-class VizioRuntimeData:
-    """Runtime data for Vizio integration."""
-
-    device: VizioAsync
-    device_coordinator: VizioDeviceCoordinator
-    apps_coordinator: VizioAppsDataUpdateCoordinator | None  # None for speakers
-
-
-type VizioConfigEntry = ConfigEntry[VizioRuntimeData]
 
 
 async def async_setup(hass: HomeAssistant, config: ConfigType) -> bool:

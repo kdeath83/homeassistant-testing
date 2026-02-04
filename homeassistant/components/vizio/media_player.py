@@ -22,7 +22,6 @@ from homeassistant.helpers.dispatcher import (
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import VizioConfigEntry
 from .const import (
     CONF_ADDITIONAL_CONFIGS,
     CONF_APPS,
@@ -36,7 +35,11 @@ from .const import (
     VIZIO_SOUND_MODE,
     VIZIO_VOLUME,
 )
-from .coordinator import VizioAppsDataUpdateCoordinator, VizioDeviceCoordinator
+from .coordinator import (
+    VizioAppsDataUpdateCoordinator,
+    VizioConfigEntry,
+    VizioDeviceCoordinator,
+)
 
 PARALLEL_UPDATES = 0
 

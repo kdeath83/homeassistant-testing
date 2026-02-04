@@ -157,12 +157,12 @@ class VizioDeviceCoordinator(DataUpdateCoordinator[VizioDeviceData]):
 class VizioAppsDataUpdateCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]):
     """Define an object to hold Vizio app config data."""
 
-    config_entry: ConfigEntry
+    config_entry: VizioConfigEntry
 
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        config_entry: VizioConfigEntry,
         store: Store[list[dict[str, Any]]],
     ) -> None:
         """Initialize."""
@@ -209,3 +209,15 @@ class VizioAppsDataUpdateCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]
         else:
             self.fail_count += 1
         return self.data
+
+
+@dataclass
+class VizioRuntimeData:
+    """Runtime data for Vizio integration."""
+
+    device: VizioAsync
+    device_coordinator: VizioDeviceCoordinator
+    apps_coordinator: VizioAppsDataUpdateCoordinator | None  # None for speakers
+
+
+type VizioConfigEntry = ConfigEntry[VizioRuntimeData]
