@@ -59,7 +59,7 @@ class VizioDeviceCoordinator(DataUpdateCoordinator[VizioDeviceData]):
     def __init__(
         self,
         hass: HomeAssistant,
-        config_entry: ConfigEntry,
+        config_entry: VizioConfigEntry,
         device: VizioAsync,
     ) -> None:
         """Initialize the coordinator."""
