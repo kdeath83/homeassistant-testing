@@ -223,13 +223,13 @@ class VizioDevice(CoordinatorEntity[VizioDeviceCoordinator], MediaPlayerEntity):
         if data.current_input:
             self._current_input = data.current_input
         if data.input_list:
-            self._available_inputs = data.input_list
+            self._available_inputs = [i.name for i in data.input_list]
 
         # App state (TV only) - check if device supports apps
         if (
             self._attr_device_class == MediaPlayerDeviceClass.TV
-            and data.input_list
-            and any(app in data.input_list for app in INPUT_APPS)
+            and self._available_inputs
+            and any(app in self._available_inputs for app in INPUT_APPS)
         ):
             all_apps = self._all_apps or ()
             self._available_apps = self._apps_list([app["name"] for app in all_apps])
