@@ -5109,6 +5109,11 @@
         }
       }
     },
+    "photo_frame": {
+      "integration_type": "service",
+      "config_flow": true,
+      "iot_class": "calculated"
+    },
     "pi_hole": {
       "name": "Pi-hole",
       "integration_type": "device",
@@ -8155,6 +8160,7 @@
     "moon",
     "nextbus",
     "nmap_tracker",
+    "photo_frame",
     "plant",
     "proximity",
     "random",
