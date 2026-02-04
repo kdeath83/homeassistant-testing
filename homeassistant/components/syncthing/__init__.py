@@ -1,7 +1,9 @@
 """The syncthing integration."""
 
 import asyncio
+from asyncio import Task
 import logging
+from typing import Any
 
 import aiosyncthing
 
@@ -13,13 +15,15 @@ from homeassistant.const import (
     EVENT_HOMEASSISTANT_STOP,
     Platform,
 )
-from homeassistant.core import HomeAssistant
+from homeassistant.core import Event, HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.dispatcher import async_dispatcher_send
 
 from .const import (
+    DEVICE_EVENTS,
     DOMAIN,
-    EVENTS,
+    FOLDER_EVENTS,
+    INITIAL_EVENTS_READY,
     RECONNECT_INTERVAL,
     SERVER_AVAILABLE,
     SERVER_UNAVAILABLE,
@@ -57,7 +61,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
-    async def cancel_listen_task(_):
+    async def cancel_listen_task(event: Event) -> None:
+        """Cancel the listen task on Home Assistant stop."""
         await syncthing.unsubscribe()
 
     entry.async_on_unload(
@@ -80,44 +85,57 @@ async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 class SyncthingClient:
     """A Syncthing client."""
 
-    def __init__(self, hass, client, server_id):
+    def __init__(
+        self, hass: HomeAssistant, client: aiosyncthing.Syncthing, server_id: str
+    ) -> None:
         """Initialize the client."""
-        self._hass = hass
-        self._client = client
-        self._server_id = server_id
-        self._listen_task = None
+        self._hass: HomeAssistant = hass
+        self._client: aiosyncthing.Syncthing = client
+        self._server_id: str = server_id
+        self._listen_task: Task[None] | None = None
+        self._initial_events: list[dict[str, Any]] = []
+        self._inital_events_processed: bool = False
 
     @property
-    def server_id(self):
+    def server_id(self) -> str:
         """Get server id."""
         return self._server_id
 
     @property
-    def url(self):
+    def url(self) -> str:
         """Get server URL."""
         return self._client.url
 
     @property
-    def database(self):
+    def database(self) -> aiosyncthing.Database:
         """Get database namespace client."""
         return self._client.database
 
     @property
-    def system(self):
+    def system(self) -> aiosyncthing.System:
         """Get system namespace client."""
         return self._client.system
 
-    def subscribe(self):
+    @property
+    def config(self) -> aiosyncthing.Config:
+        """Get config namespace client."""
+        return self._client.config
+
+    def subscribe(self) -> None:
         """Start event listener coroutine."""
         self._listen_task = asyncio.create_task(self._listen())
 
-    async def unsubscribe(self):
+    def get_initial_events(self) -> list[dict[str, Any]]:
+        """Get initial events received upon subscription."""
+        return self._initial_events
+
+    async def unsubscribe(self) -> None:
         """Stop event listener coroutine."""
         if self._listen_task:
             self._listen_task.cancel()
         await self._client.close()
 
-    async def _listen(self):
+    async def _listen(self) -> None:
         """Listen to Syncthing events."""
         events = self._client.events
         server_was_unavailable = False
@@ -136,22 +154,41 @@ class SyncthingClient:
                 continue
             try:
                 async for event in events.listen():
-                    if events.last_seen_id == 0:
-                        continue  # skipping historical events from the first batch
-                    if event["type"] not in EVENTS:
+                    if events.last_seen_id == 0 and event["type"] in DEVICE_EVENTS:
+                        # Storing initial events to find current device state
+                        self._initial_events.append(event)
                         continue
 
-                    signal_name = EVENTS[event["type"]]
-                    folder = None
-                    if "folder" in event["data"]:
-                        folder = event["data"]["folder"]
-                    else:  # A workaround, some events store folder id under `id` key
-                        folder = event["data"]["id"]
-                    async_dispatcher_send(
-                        self._hass,
-                        f"{signal_name}-{self._server_id}-{folder}",
-                        event,
-                    )
+                    # Triggering device status check once initial events are ready
+                    if not self._inital_events_processed and events.last_seen_id != 0:
+                        self._inital_events_processed = True
+                        async_dispatcher_send(
+                            self._hass,
+                            f"{INITIAL_EVENTS_READY}-{self._server_id}",
+                        )
+
+                    if (
+                        event["type"] not in FOLDER_EVENTS
+                        and event["type"] not in DEVICE_EVENTS
+                    ):
+                        continue
+
+                    if event["type"] in DEVICE_EVENTS:
+                        signal_name = DEVICE_EVENTS[event["type"]]
+                        device = event["data"].get("device") or event["data"]["id"]
+                        async_dispatcher_send(
+                            self._hass,
+                            f"{signal_name}-{self._server_id}-{device}",
+                            event,
+                        )
+                    elif event["type"] in FOLDER_EVENTS:
+                        signal_name = FOLDER_EVENTS[event["type"]]
+                        folder = event["data"].get("folder") or event["data"]["id"]
+                        async_dispatcher_send(
+                            self._hass,
+                            f"{signal_name}-{self._server_id}-{folder}",
+                            event,
+                        )
             except aiosyncthing.exceptions.SyncthingError:
                 _LOGGER.warning(
                     (
@@ -168,7 +205,8 @@ class SyncthingClient:
                 server_was_unavailable = True
                 continue
 
-    async def _server_available(self):
+    async def _server_available(self) -> bool:
+        """Check if the Syncthing server is available."""
         try:
             await self._client.system.ping()
         except aiosyncthing.exceptions.SyncthingError:
