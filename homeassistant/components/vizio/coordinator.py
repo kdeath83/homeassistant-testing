@@ -147,7 +147,7 @@ class VizioDeviceCoordinator(DataUpdateCoordinator[VizioDeviceData]):
             )
 
         current_input = await self.device.get_current_input(log_api_exception=False)
-        input_list = await self.device.get_inputs_list(log_api_exception=False) or []
+        input_list = await self.device.get_inputs_list(log_api_exception=False)
 
         current_app_config = None
         if self.config_entry.data[CONF_DEVICE_CLASS] == MediaPlayerDeviceClass.TV:
