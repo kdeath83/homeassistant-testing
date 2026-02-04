@@ -54,7 +54,7 @@ class VizioDeviceData:
 class VizioDeviceCoordinator(DataUpdateCoordinator[VizioDeviceData]):
     """Coordinator for Vizio device data."""
 
-    config_entry: ConfigEntry
+    config_entry: VizioConfigEntry
 
     def __init__(
         self,
