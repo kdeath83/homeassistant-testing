@@ -129,15 +129,15 @@ async def _cm_for_test_setup_without_apps(
     """Context manager to setup test for Vizio devices without including app specific patches."""
     with (
         patch(
-            "homeassistant.components.vizio.media_player.VizioAsync.get_all_settings",
+            "homeassistant.components.vizio.VizioAsync.get_all_settings",
             return_value=all_settings,
         ),
         patch(
-            "homeassistant.components.vizio.media_player.VizioAsync.get_setting_options",
+            "homeassistant.components.vizio.VizioAsync.get_setting_options",
             return_value=EQ_LIST,
         ),
         patch(
-            "homeassistant.components.vizio.media_player.VizioAsync.get_power_state",
+            "homeassistant.components.vizio.VizioAsync.get_power_state",
             return_value=vizio_power_state,
         ),
     ):
@@ -155,7 +155,11 @@ async def _test_setup_tv(hass: HomeAssistant, vizio_power_state: bool | None) ->
     )
 
     async with _cm_for_test_setup_without_apps(
-        {"volume": int(MAX_VOLUME[VIZIO_DEVICE_CLASS_TV] / 2), "mute": "Off"},
+        {
+            "volume": int(MAX_VOLUME[VIZIO_DEVICE_CLASS_TV] / 2),
+            "mute": "Off",
+            "eq": CURRENT_EQ,
+        },
         vizio_power_state,
     ):
         await _add_config_entry_to_hass(hass, config_entry)
@@ -165,7 +169,7 @@ async def _test_setup_tv(hass: HomeAssistant, vizio_power_state: bool | None) ->
         )
         if ha_power_state == STATE_ON:
             _assert_sources_and_volume(attr, VIZIO_DEVICE_CLASS_TV)
-            assert "sound_mode" not in attr
+            assert attr[ATTR_SOUND_MODE] == CURRENT_EQ
 
 
 async def _test_setup_speaker(
@@ -190,18 +194,14 @@ async def _test_setup_speaker(
         audio_settings,
         vizio_power_state,
     ):
-        with patch(
-            "homeassistant.components.vizio.media_player.VizioAsync.get_current_app_config",
-        ) as service_call:
-            await _add_config_entry_to_hass(hass, config_entry)
+        await _add_config_entry_to_hass(hass, config_entry)
 
-            attr = _get_attr_and_assert_base_attr(
-                hass, MediaPlayerDeviceClass.SPEAKER, ha_power_state
-            )
-            if ha_power_state == STATE_ON:
-                _assert_sources_and_volume(attr, VIZIO_DEVICE_CLASS_SPEAKER)
-                assert not service_call.called
-                assert "sound_mode" in attr
+        attr = _get_attr_and_assert_base_attr(
+            hass, MediaPlayerDeviceClass.SPEAKER, ha_power_state
+        )
+        if ha_power_state == STATE_ON:
+            _assert_sources_and_volume(attr, VIZIO_DEVICE_CLASS_SPEAKER)
+            assert "sound_mode" in attr
 
 
 @asynccontextmanager
@@ -218,7 +218,7 @@ async def _cm_for_test_setup_tv_with_apps(
         True,
     ):
         with patch(
-            "homeassistant.components.vizio.media_player.VizioAsync.get_current_app_config",
+            "homeassistant.components.vizio.VizioAsync.get_current_app_config",
             return_value=AppConfig(**app_config),
         ):
             await _add_config_entry_to_hass(hass, config_entry)
@@ -377,7 +377,7 @@ async def test_services(hass: HomeAssistant) -> None:
         "vol_up",
         SERVICE_VOLUME_SET,
         {ATTR_MEDIA_VOLUME_LEVEL: 1},
-        num=(100 - 15),
+        num=50,  # From 50% to 100% = 50 steps (TV max volume 100, starting at 50)
     )
     await _test_service(
         hass,
@@ -385,7 +385,7 @@ async def test_services(hass: HomeAssistant) -> None:
         "vol_down",
         SERVICE_VOLUME_SET,
         {ATTR_MEDIA_VOLUME_LEVEL: 0},
-        num=(15 - 0),
+        num=100,  # From 100% (after previous vol_up) to 0% = 100 steps
     )
     await _test_service(hass, MP_DOMAIN, "ch_up", SERVICE_MEDIA_NEXT_TRACK, None)
     await _test_service(hass, MP_DOMAIN, "ch_down", SERVICE_MEDIA_PREVIOUS_TRACK, None)
@@ -466,7 +466,7 @@ async def _test_update_availability_switch(
         future = now + (future_interval * i)
         with (
             patch(
-                "homeassistant.components.vizio.media_player.VizioAsync.get_power_state",
+                "homeassistant.components.vizio.VizioAsync.get_power_state",
                 return_value=final_power_state,
             ),
             freeze_time(future),
@@ -478,12 +478,13 @@ async def _test_update_availability_switch(
             else:
                 assert hass.states.get(ENTITY_ID).state != STATE_UNAVAILABLE
 
-    # Ensure connection status messages from vizio.media_player appear exactly once
+    # Ensure connection status messages from vizio.coordinator appear exactly once
     # (on availability state change)
     vizio_log_list = [
         log
         for log in caplog.records
-        if log.name == "homeassistant.components.vizio.media_player"
+        if log.name == "homeassistant.components.vizio.coordinator"
+        and log.levelname == "WARNING"
     ]
     assert len(vizio_log_list) == 1
 
@@ -679,7 +680,7 @@ async def test_setup_tv_without_mute(hass: HomeAssistant) -> None:
 
     async with _cm_for_test_setup_without_apps(
         {"volume": int(MAX_VOLUME[VIZIO_DEVICE_CLASS_TV] / 2)},
-        STATE_ON,
+        True,
     ):
         await _add_config_entry_to_hass(hass, config_entry)
 
