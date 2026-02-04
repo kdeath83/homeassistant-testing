@@ -23,9 +23,20 @@ from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .const import DOMAIN, VIZIO_AUDIO_SETTINGS, VIZIO_SOUND_MODE
 
+type VizioConfigEntry = ConfigEntry[VizioRuntimeData]
+
 _LOGGER = logging.getLogger(__name__)
 
 SCAN_INTERVAL = timedelta(seconds=30)
+
+
+@dataclass
+class VizioRuntimeData:
+    """Runtime data for Vizio integration."""
+
+    device: VizioAsync
+    device_coordinator: VizioDeviceCoordinator
+    apps_coordinator: VizioAppsDataUpdateCoordinator | None  # None for speakers
 
 
 @dataclass
@@ -209,15 +220,3 @@ class VizioAppsDataUpdateCoordinator(DataUpdateCoordinator[list[dict[str, Any]]]
         else:
             self.fail_count += 1
         return self.data
-
-
-@dataclass
-class VizioRuntimeData:
-    """Runtime data for Vizio integration."""
-
-    device: VizioAsync
-    device_coordinator: VizioDeviceCoordinator
-    apps_coordinator: VizioAppsDataUpdateCoordinator | None  # None for speakers
-
-
-type VizioConfigEntry = ConfigEntry[VizioRuntimeData]
