@@ -4,6 +4,7 @@ from collections.abc import Generator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from compit_inext_api import CompitParameter
+from compit_inext_api.params_dictionary import PARAMS
 import pytest
 
 from homeassistant.components.compit.const import DOMAIN
@@ -53,6 +54,8 @@ def mock_connector():
         MagicMock(
             code="__trybpracy", value="de_icing"
         ),  # parameter not relevant for this device, should be ignored
+        MagicMock(code="__t_ext", value=15.5),
+        MagicMock(code="__rr_temp_wyli_bufo", value=22.0),
     ]
     mock_device_1.definition.code = 224  # R 900
 
@@ -60,6 +63,9 @@ def mock_connector():
     mock_device_2.state.params = [
         MagicMock(code="_jezyk", value="english"),
         MagicMock(code="__aerokonfbypass", value="off"),
+        MagicMock(code="__rd_co2", value="normal"),
+        MagicMock(code="__rd_pm10", value="warning"),
+        MagicMock(code="__rr_wietrzenie", value="on"),
     ]
     mock_device_2.definition.code = 223  # Nano Color 2
 
@@ -82,6 +88,14 @@ def mock_connector():
             None,
         ).value
 
+    def get_current_value(device_id: int, parameter_code: CompitParameter):
+        code = PARAMS[parameter_code][all_devices[device_id].definition.code]
+        param = next(
+            (p for p in all_devices[device_id].state.params if p.code == code),
+            None,
+        )
+        return param.value if param else None
+
     def select_device_option(
         device_id: int, parameter_code: CompitParameter, value: str
     ):
@@ -96,6 +110,7 @@ def mock_connector():
     mock_instance.init = AsyncMock(return_value=True)
     mock_instance.all_devices = all_devices
     mock_instance.get_current_option = MagicMock(side_effect=get_current_option)
+    mock_instance.get_current_value = MagicMock(side_effect=get_current_value)
     mock_instance.select_device_option = AsyncMock(side_effect=select_device_option)
     mock_instance.update_state = AsyncMock()
     mock_instance.get_device = MagicMock(side_effect=mock_get_device)
