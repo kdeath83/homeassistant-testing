@@ -10,8 +10,8 @@
       "missing_device_info": "Failed to read device information. Check the network connection of the device"
     },
     "step": {
-      "confirm": {
-        "description": "[%key:common::config_flow::description::confirm_setup%]"
+      "dhcp_confirm": {
+        "description": "Do you want to setup the Lunatone device with IP address {ip_address}?"
       },
       "reconfigure": {
         "data": {
@@ -20,16 +20,16 @@
         "data_description": {
           "url": "[%key:component::lunatone::config::step::user::data_description::url%]"
         },
-        "description": "Update the URL."
+        "description": "Update configuration for {name}."
       },
       "user": {
         "data": {
           "url": "[%key:common::config_flow::data::url%]"
         },
         "data_description": {
-          "url": "The URL of the Lunatone gateway device."
+          "url": "The URL of the Lunatone device to connect to."
         },
-        "description": "Connect to the API of your Lunatone DALI IoT Gateway."
+        "description": "Enter the URL of your Lunatone device.\nHome Assistant will use this address to connect to its API."
       }
     }
   }
