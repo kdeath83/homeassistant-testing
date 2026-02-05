@@ -1,0 +1,60 @@
+get_feeder_meal_plan:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: tuya
+
+set_feeder_meal_plan:
+  fields:
+    device_id:
+      required: true
+      selector:
+        device:
+          integration: tuya
+    data:
+      required: true
+      selector:
+        object:
+          description_field: portion
+          multiple: true
+          fields:
+            days:
+              selector:
+                select:
+                  multiple: true
+                  options:
+                    - Monday
+                    - Tuesday
+                    - Wednesday
+                    - Thursday
+                    - Friday
+                    - Saturday
+                    - Sunday
+
+            hour:
+              selector:
+                number:
+                  min: 0
+                  max: 23
+                  mode: box
+                  unit_of_measurement: "h"
+
+            minute:
+              selector:
+                number:
+                  min: 0
+                  max: 59
+                  mode: box
+                  unit_of_measurement: "m"
+            portion:
+              selector:
+                number:
+                  min: 0
+                  max: 100
+                  mode: box
+                  unit_of_measurement: "g"
+            enabled:
+              selector:
+                boolean: {}
