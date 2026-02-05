@@ -40,7 +40,7 @@ class SonarrSensorEntityDescriptionMixIn(Generic[SonarrDataT]):
     value_fn: Callable[[SonarrDataT], StateType]
 
 
-@dataclass(frozen=True)
+@dataclass(frozen=True, kw_only=True)
 class SonarrSensorEntityDescription(
     SensorEntityDescription, SonarrSensorEntityDescriptionMixIn[SonarrDataT]
 ):
