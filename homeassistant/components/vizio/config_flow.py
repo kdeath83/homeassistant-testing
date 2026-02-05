@@ -14,7 +14,6 @@ import voluptuous as vol
 from homeassistant.components.media_player import MediaPlayerDeviceClass
 from homeassistant.config_entries import (
     SOURCE_ZEROCONF,
-    ConfigEntry,
     ConfigFlow,
     ConfigFlowResult,
     OptionsFlow,
@@ -45,6 +44,7 @@ from .const import (
     DEVICE_ID,
     DOMAIN,
 )
+from .coordinator import VizioConfigEntry
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -176,7 +176,9 @@ class VizioConfigFlow(ConfigFlow, domain=DOMAIN):
 
     @staticmethod
     @callback
-    def async_get_options_flow(config_entry: ConfigEntry) -> VizioOptionsConfigFlow:
+    def async_get_options_flow(
+        config_entry: VizioConfigEntry,
+    ) -> VizioOptionsConfigFlow:
         """Get the options flow for this handler."""
         return VizioOptionsConfigFlow()
 
