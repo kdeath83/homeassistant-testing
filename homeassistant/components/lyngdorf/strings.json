@@ -1,0 +1,39 @@
+{
+  "config": {
+    "abort": {
+      "already_configured": "[%key:common::config_flow::abort::already_configured_device%]"
+    },
+    "error": {
+      "cannot_connect": "[%key:common::config_flow::error::cannot_connect%]",
+      "timeout_connect": "[%key:common::config_flow::error::timeout_connect%]",
+      "unknown": "[%key:common::config_flow::error::unknown%]",
+      "unsupported_model": "This Lyngdorf model is not supported"
+    },
+    "flow_title": "{name}",
+    "step": {
+      "confirm": {
+        "description": "[%key:common::config_flow::description::confirm_setup%]"
+      },
+      "manual": {
+        "data": {
+          "host": "[%key:common::config_flow::data::host%]",
+          "name": "[%key:common::config_flow::data::name%]",
+          "serial_number": "Serial number"
+        },
+        "data_description": {
+          "host": "Hostname or IP address of the Lyngdorf device",
+          "name": "Name for this device",
+          "serial_number": "Serial number reported by the device"
+        },
+        "title": "Lyngdorf device connection"
+      },
+      "user": {
+        "data": {
+          "name": "[%key:common::config_flow::data::name%]"
+        },
+        "description": "Choose a device to configure",
+        "title": "Discovered Lyngdorf devices"
+      }
+    }
+  }
+}
