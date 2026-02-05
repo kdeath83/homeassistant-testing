@@ -137,7 +137,23 @@ async def test_climate_fan_mode(
     assert hass.states.get("climate.l1_101").attributes[ATTR_FAN_MODE] == FAN_HIGH
     assert hass.states.get("climate.l1_102").attributes[ATTR_FAN_MODE] == "vlow"
     assert hass.states.get("climate.l1_103").attributes[ATTR_FAN_MODE] == FAN_MEDIUM
-    assert hass.states.get("climate.l1_104").attributes[ATTR_FAN_MODE] == "ULTRA"
+    assert hass.states.get("climate.l1_104").attributes[ATTR_FAN_MODE] == "ultra"
+
+
+async def test_climate_unknown_fan_mode_warning(
+    load_int: ConfigEntry,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test the Coolmaster climate unknown fan mode warning."""
+    # TODO(2026.7.0): When support for unknown fan speeds is removed, delete this test.
+    setup_logs = caplog.get_records(when="setup")
+    assert any(
+        "The CoolMaster integration has detected an unknown fan speed value from your HVAC unit: ultra. "
+        "Support for unknown fan speeds will be removed in 2026.7.0"
+        in rec.getMessage()
+        and rec.levelname == "WARNING"
+        for rec in setup_logs
+    )
 
 
 async def test_climate_fan_modes(
