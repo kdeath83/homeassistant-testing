@@ -22,18 +22,20 @@ async def test_config_flow(hass: HomeAssistant) -> None:
         context={"source": SOURCE_USER},
     )
 
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
+    assert result.get("type") is FlowResultType.FORM
+    assert result.get("step_id") == "user"
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input=MOCK_USER_INPUT,
     )
 
-    assert result["type"] is FlowResultType.CREATE_ENTRY
-    assert result["title"] == MOCK_SERIAL_NUMBER
-    assert result["data"] == MOCK_USER_INPUT
-    assert result["result"].unique_id == MOCK_SERIAL_NUMBER
+    assert result.get("type") is FlowResultType.CREATE_ENTRY
+    assert result.get("title") == MOCK_SERIAL_NUMBER
+    assert result.get("data") == MOCK_USER_INPUT
+    result = result.get("result")
+    assert result is not None
+    assert result.unique_id == MOCK_SERIAL_NUMBER
 
 
 @pytest.mark.usefixtures("mock_setup_entry", "mock_connection")
@@ -48,16 +50,16 @@ async def test_malformed_token(hass: HomeAssistant) -> None:
             data=MOCK_USER_INPUT,
         )
 
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
-    assert result["errors"] == {"base": "malformed_token"}
+    assert result.get("type") is FlowResultType.FORM
+    assert result.get("step_id") == "user"
+    assert result.get("errors") == {"base": "malformed_token"}
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input=MOCK_USER_INPUT,
     )
 
-    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result.get("type") is FlowResultType.CREATE_ENTRY
 
 
 @pytest.mark.usefixtures("mock_setup_entry")
@@ -72,16 +74,16 @@ async def test_invalid_auth(hass: HomeAssistant, mock_connection: MagicMock) -> 
             data=MOCK_USER_INPUT,
         )
 
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
-    assert result["errors"] == {"base": "invalid_auth"}
+    assert result.get("type") is FlowResultType.FORM
+    assert result.get("step_id") == "user"
+    assert result.get("errors") == {"base": "invalid_auth"}
 
     result = await hass.config_entries.flow.async_configure(
         result["flow_id"],
         user_input=MOCK_USER_INPUT,
     )
 
-    assert result["type"] is FlowResultType.CREATE_ENTRY
+    assert result.get("type") is FlowResultType.CREATE_ENTRY
 
 
 @pytest.mark.usefixtures("mock_setup_entry", "mock_connection")
@@ -97,6 +99,6 @@ async def test_device_exists_abort(
         data=MOCK_USER_INPUT,
     )
 
-    assert result["type"] is FlowResultType.ABORT
-    assert result["reason"] == "already_configured"
+    assert result.get("type") is FlowResultType.ABORT
+    assert result.get("reason") == "already_configured"
     assert len(hass.config_entries.async_entries(DOMAIN)) == 1
