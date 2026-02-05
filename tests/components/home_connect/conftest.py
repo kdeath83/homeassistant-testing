@@ -164,7 +164,7 @@ async def mock_integration_setup(
 
 
 def _get_set_program_side_effect(
-    event_queue: asyncio.Queue[list[EventMessage]], event_key: EventKey
+    event_queue: asyncio.Queue[list[EventMessage | Exception]], event_key: EventKey
 ):
     """Set program side effect."""
 
@@ -207,7 +207,7 @@ def _get_set_program_side_effect(
 
 
 def _get_set_setting_side_effect(
-    event_queue: asyncio.Queue[list[EventMessage]],
+    event_queue: asyncio.Queue[list[EventMessage | Exception]],
 ):
     """Set settings side effect."""
 
@@ -238,7 +238,7 @@ def _get_set_setting_side_effect(
 
 
 def _get_set_program_options_side_effect(
-    event_queue: asyncio.Queue[list[EventMessage]],
+    event_queue: asyncio.Queue[list[EventMessage | Exception]],
 ):
     """Set programs side effect."""
 
@@ -278,6 +278,16 @@ def _get_set_program_options_side_effect(
     return set_program_options_side_effect
 
 
+def _get_specific_appliance_side_effect(
+    appliances: list[HomeAppliance], ha_id: str
+) -> HomeAppliance:
+    """Get specific appliance side effect."""
+    for appliance_ in appliances:
+        if appliance_.ha_id == ha_id:
+            return appliance_
+    pytest.fail(f"Mock didn't include appliance with id {ha_id}")
+
+
 @pytest.fixture(name="client")
 def mock_client(
     appliances: list[HomeAppliance],
@@ -290,9 +300,9 @@ def mock_client(
         autospec=HomeConnectClient,
     )
 
-    event_queue: asyncio.Queue[list[EventMessage]] = asyncio.Queue()
+    event_queue: asyncio.Queue[list[EventMessage | Exception]] = asyncio.Queue()
 
-    async def add_events(events: list[EventMessage]) -> None:
+    async def add_events(events: list[EventMessage | Exception]) -> None:
         await event_queue.put(events)
 
     mock.add_events = add_events
@@ -326,19 +336,13 @@ def mock_client(
         """Mock stream_all_events."""
         while True:
             for event in await event_queue.get():
+                if isinstance(event, Exception):
+                    raise event
                 yield event
 
     mock.get_home_appliances = AsyncMock(return_value=ArrayOfHomeAppliances(appliances))
-
-    def _get_specific_appliance_side_effect(ha_id: str) -> HomeAppliance:
-        """Get specific appliance side effect."""
-        for appliance_ in appliances:
-            if appliance_.ha_id == ha_id:
-                return appliance_
-        raise HomeConnectApiError("error.key", "error description")
-
     mock.get_specific_appliance = AsyncMock(
-        side_effect=_get_specific_appliance_side_effect
+        side_effect=lambda ha_id: _get_specific_appliance_side_effect(appliances, ha_id)
     )
     mock.stream_all_events = stream_all_events
 
@@ -348,7 +352,10 @@ def mock_client(
             appliance for appliance in appliances if appliance.ha_id == ha_id
         ).type
         if appliance_type not in MOCK_PROGRAMS:
-            raise HomeConnectApiError("error.key", "error description")
+            raise HomeConnectApiError(
+                "missing programs at mock",
+                f"Mock didn't include programs for appliance with id {ha_id}",
+            )
 
         return ArrayOfPrograms(
             [
@@ -381,7 +388,10 @@ def mock_client(
                 for setting_dict in cast(list[dict], settings["settings"]):
                     if setting_dict["key"] == setting_key:
                         return GetSetting.from_dict(setting_dict)
-        raise HomeConnectApiError("error.key", "error description")
+        raise HomeConnectApiError(
+            "missing setting at mock",
+            f"Mock didn't include setting {setting_key} for appliance with id {ha_id}",
+        )
 
     async def _get_available_commands_side_effect(ha_id: str) -> ArrayOfCommands:
         """Get available commands."""
@@ -390,7 +400,10 @@ def mock_client(
                 return ArrayOfCommands.from_dict(
                     MOCK_AVAILABLE_COMMANDS[appliance_.type]
                 )
-        raise HomeConnectApiError("error.key", "error description")
+        raise HomeConnectApiError(
+            "missing available commands at mock",
+            "Mock didn't include available commands for appliance with id {ha_id}",
+        )
 
     mock.start_program = AsyncMock(
         side_effect=_get_set_program_side_effect(
@@ -467,6 +480,9 @@ def mock_client_with_exception(
 
     appliances = [appliance] if appliance else appliances
     mock.get_home_appliances = AsyncMock(return_value=ArrayOfHomeAppliances(appliances))
+    mock.get_specific_appliance = AsyncMock(
+        side_effect=lambda ha_id: _get_specific_appliance_side_effect(appliances, ha_id)
+    )
     mock.stream_all_events = stream_all_events
 
     mock.start_program = AsyncMock(side_effect=exception)
