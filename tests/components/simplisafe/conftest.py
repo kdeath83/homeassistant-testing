@@ -1,11 +1,12 @@
 """Define test fixtures for SimpliSafe."""
 
-from collections.abc import AsyncGenerator
+import asyncio
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 from simplipy.system.v3 import SystemV3
 
+from homeassistant.components.simplisafe import SimpliSafe
 from homeassistant.components.simplisafe.const import DOMAIN
 from homeassistant.const import CONF_CODE, CONF_PASSWORD, CONF_TOKEN, CONF_USERNAME
 from homeassistant.core import HomeAssistant
@@ -98,11 +99,9 @@ def reauth_config_fixture() -> dict[str, str]:
     }
 
 
-@pytest.fixture(name="setup_simplisafe")
-async def setup_simplisafe_fixture(
-    hass: HomeAssistant, api: Mock, config: dict[str, str]
-) -> AsyncGenerator[None]:
-    """Define a fixture to set up SimpliSafe."""
+@pytest.fixture(name="patch_simplisafe_api")
+def patch_simplisafe_api_fixture(api: Mock, websocket: Mock):
+    """Patch the SimpliSafe API creation methods and websocket loop."""
     with (
         patch(
             "homeassistant.components.simplisafe.config_flow.API.async_from_auth",
@@ -116,17 +115,49 @@ async def setup_simplisafe_fixture(
             "homeassistant.components.simplisafe.API.async_from_refresh_token",
             return_value=api,
         ),
-        patch(
-            "homeassistant.components.simplisafe.SimpliSafe._async_start_websocket_loop"
-        ),
-        patch(
-            "homeassistant.components.simplisafe.PLATFORMS",
-            [],
-        ),
     ):
-        assert await async_setup_component(hass, DOMAIN, config)
-        await hass.async_block_till_done()
+        # Patch the websocket on the api object
+        api.websocket = websocket
         yield
+
+
+@pytest.fixture(name="setup_simplisafe")
+async def setup_simplisafe_fixture(
+    hass: HomeAssistant, api: Mock, config: dict[str, str], patch_simplisafe_api
+) -> None:
+    """Define a fixture to set up SimpliSafe for config flow tests."""
+    assert await async_setup_component(hass, DOMAIN, config)
+    await hass.async_block_till_done()
+
+
+@pytest.fixture
+async def simplisafe_manager(
+    hass: HomeAssistant,
+    config_entry: MockConfigEntry,
+    patch_simplisafe_api,
+    monkeypatch: pytest.MonkeyPatch,
+) -> SimpliSafe:
+    """Capture the real SimpliSafe manager created by HA setup."""
+
+    manager = None  # outer variable to capture the instance
+    orig_init = SimpliSafe.__init__
+
+    def capture_init(self, *args, **kwargs):
+        nonlocal manager
+        orig_init(self, *args, **kwargs)  # call the original __init__
+        manager = self  # capture the instance for the fixture
+
+    # Apply monkeypatch just to capture the manager
+    monkeypatch.setattr(
+        "homeassistant.components.simplisafe.SimpliSafe.__init__",
+        capture_init,
+    )
+
+    # Let HA set up the integration normally
+    await hass.config_entries.async_setup(config_entry.entry_id)
+    await hass.async_block_till_done()
+    assert manager is not None
+    return manager
 
 
 @pytest.fixture(name="sms_config")
@@ -150,6 +181,7 @@ def system_v3_fixture(
     system.sensor_data = data_sensor
     system.settings_data = data_settings
     system.generate_device_objects()
+    system.async_update = AsyncMock(return_value=None)
     return system
 
 
@@ -162,8 +194,18 @@ def unique_id_fixture() -> str:
 @pytest.fixture(name="websocket")
 def websocket_fixture() -> Mock:
     """Define a simplisafe-python websocket object."""
-    return Mock(
+    listen_event = asyncio.Event()
+
+    async def listen_wait_event() -> None:
+        """Dummy websocket listen that waits for an event."""
+        await listen_event.wait()
+
+    ws = Mock(
         async_connect=AsyncMock(),
         async_disconnect=AsyncMock(),
-        async_listen=AsyncMock(),
+        async_listen=listen_wait_event,
     )
+
+    # Expose the event so tests can trigger it
+    ws.listen_event = listen_event
+    return ws
