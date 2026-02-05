@@ -43,6 +43,7 @@ class MatterButtonEntityDescription(ButtonEntityDescription, MatterEntityDescrip
 class MatterCommandButton(MatterEntity, ButtonEntity):
     """Representation of a Matter Button entity."""
 
+    _platform_translation_key = "button"
     entity_description: MatterButtonEntityDescription
 
     async def async_press(self) -> None:
@@ -58,6 +59,7 @@ DISCOVERY_SCHEMAS = [
         platform=Platform.BUTTON,
         entity_description=MatterButtonEntityDescription(
             key="IdentifyButton",
+            translation_key="identify",
             entity_category=EntityCategory.DIAGNOSTIC,
             device_class=ButtonDeviceClass.IDENTIFY,
             command=lambda: clusters.Identify.Commands.Identify(identifyTime=15),

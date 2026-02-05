@@ -73,14 +73,15 @@ async def test_humidity_sensor(
     matter_node: MatterNode,
 ) -> None:
     """Test humidity sensor."""
-    state = hass.states.get("sensor.mock_humidity_sensor_humidity")
+    # With translation_key, entity ID uses device name only
+    state = hass.states.get("sensor.mock_humidity_sensor")
     assert state
     assert state.state == "0.0"
 
     set_node_attribute(matter_node, 1, 1029, 0, 4000)
     await trigger_subscription_callback(hass, matter_client)
 
-    state = hass.states.get("sensor.mock_humidity_sensor_humidity")
+    state = hass.states.get("sensor.mock_humidity_sensor")
     assert state
     assert state.state == "40.0"
 
@@ -92,14 +93,15 @@ async def test_light_sensor(
     matter_node: MatterNode,
 ) -> None:
     """Test light sensor."""
-    state = hass.states.get("sensor.mock_light_sensor_illuminance")
+    # With translation_key, entity ID uses device name only
+    state = hass.states.get("sensor.mock_light_sensor")
     assert state
     assert state.state == "1.3"
 
     set_node_attribute(matter_node, 1, 1024, 0, 3000)
     await trigger_subscription_callback(hass, matter_client)
 
-    state = hass.states.get("sensor.mock_light_sensor_illuminance")
+    state = hass.states.get("sensor.mock_light_sensor")
     assert state
     assert state.state == "2.0"
 
@@ -111,14 +113,15 @@ async def test_temperature_sensor(
     matter_node: MatterNode,
 ) -> None:
     """Test temperature sensor."""
-    state = hass.states.get("sensor.mock_temperature_sensor_temperature")
+    # With translation_key, entity ID uses device name only
+    state = hass.states.get("sensor.mock_temperature_sensor")
     assert state
     assert state.state == "21.0"
 
     set_node_attribute(matter_node, 1, 1026, 0, 2500)
     await trigger_subscription_callback(hass, matter_client)
 
-    state = hass.states.get("sensor.mock_temperature_sensor_temperature")
+    state = hass.states.get("sensor.mock_temperature_sensor")
     assert state
     assert state.state == "25.0"
 
@@ -131,7 +134,7 @@ async def test_battery_sensor(
     matter_node: MatterNode,
 ) -> None:
     """Test battery sensor."""
-    entity_id = "sensor.eve_door_battery"
+    entity_id = "sensor.eve_door"
     state = hass.states.get(entity_id)
     assert state
     assert state.state == "100"
@@ -221,14 +224,14 @@ async def test_eve_thermo_sensor(
     assert state.state == "0"
 
     # LocalTemperature
-    state = hass.states.get("sensor.eve_thermo_20ebp1701_temperature")
+    state = hass.states.get("sensor.eve_thermo_20ebp1701_2")
     assert state
     assert state.state == "21.0"
 
     set_node_attribute(matter_node, 1, 513, 0, 1800)
     await trigger_subscription_callback(hass, matter_client)
 
-    state = hass.states.get("sensor.eve_thermo_20ebp1701_temperature")
+    state = hass.states.get("sensor.eve_thermo_20ebp1701_2")
     assert state
     assert state.state == "18.0"
 
@@ -260,14 +263,15 @@ async def test_pressure_sensor(
     matter_node: MatterNode,
 ) -> None:
     """Test pressure sensor."""
-    state = hass.states.get("sensor.mock_pressure_sensor_pressure")
+    # With translation_key, entity ID uses device name only
+    state = hass.states.get("sensor.mock_pressure_sensor")
     assert state
     assert state.state == "0.0"
 
     set_node_attribute(matter_node, 1, 1027, 0, 1010)
     await trigger_subscription_callback(hass, matter_client)
 
-    state = hass.states.get("sensor.mock_pressure_sensor_pressure")
+    state = hass.states.get("sensor.mock_pressure_sensor")
     assert state
     assert state.state == "101.0"
 
@@ -280,13 +284,13 @@ async def test_eve_weather_sensor_custom_cluster(
 ) -> None:
     """Test weather sensor created from (Eve) custom cluster."""
     # pressure sensor on Eve custom cluster
-    state = hass.states.get("sensor.eve_weather_pressure")
+    state = hass.states.get("sensor.eve_weather_3")
     assert state
     assert state.state == "1008.5"
 
     set_node_attribute(matter_node, 1, 319486977, 319422484, 800)
     await trigger_subscription_callback(hass, matter_client)
-    state = hass.states.get("sensor.eve_weather_pressure")
+    state = hass.states.get("sensor.eve_weather_3")
     assert state
     assert state.state == "800.0"
 
@@ -299,50 +303,50 @@ async def test_air_quality_sensor(
 ) -> None:
     """Test air quality sensor."""
     # Carbon Dioxide
-    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_carbon_dioxide")
+    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_3")
     assert state
     assert state.state == "678.0"
 
     set_node_attribute(matter_node, 1, 1037, 0, 789)
     await trigger_subscription_callback(hass, matter_client)
 
-    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_carbon_dioxide")
+    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_3")
     assert state
     assert state.state == "789.0"
 
     # PM1
-    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_pm1")
+    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_5")
     assert state
     assert state.state == "3.0"
 
     set_node_attribute(matter_node, 1, 1068, 0, 50)
     await trigger_subscription_callback(hass, matter_client)
 
-    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_pm1")
+    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_5")
     assert state
     assert state.state == "50.0"
 
     # PM2.5
-    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_pm2_5")
+    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_6")
     assert state
     assert state.state == "3.0"
 
     set_node_attribute(matter_node, 1, 1066, 0, 50)
     await trigger_subscription_callback(hass, matter_client)
 
-    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_pm2_5")
+    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_6")
     assert state
     assert state.state == "50.0"
 
     # PM10
-    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_pm10")
+    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_7")
     assert state
     assert state.state == "3.0"
 
     set_node_attribute(matter_node, 1, 1069, 0, 50)
     await trigger_subscription_callback(hass, matter_client)
 
-    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_pm10")
+    state = hass.states.get("sensor.lightfi_aq1_air_quality_sensor_7")
     assert state
     assert state.state == "50.0"
 
