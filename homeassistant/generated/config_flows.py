@@ -558,6 +558,7 @@ FLOWS = {
         "qingping",
         "qnap",
         "qnap_qsw",
+        "qube_heatpump",
         "rabbitair",
         "rachio",
         "radarr",
